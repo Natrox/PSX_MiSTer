@@ -125,7 +125,7 @@ ENTITY ascal IS
 		ADAPTIVE     : boolean := true;
 		DOWNSCALE_NN : boolean := false;
 		FRAC         : natural RANGE 4 TO 8 :=4;
-		OHRES        : natural RANGE 1 TO 4096 :=2048;
+		OHRES        : natural RANGE 1 TO 4096 :=4096;
 		IHRES        : natural RANGE 1 TO 2048 :=2048;
 		N_DW         : natural RANGE 64 TO 128 := 128;
 		N_AW         : natural RANGE 8 TO 32 := 32;
@@ -1783,8 +1783,8 @@ BEGIN
 			o_vfrac<=x"000";
 --pragma synthesis_on
 		ELSIF rising_edge(o_clk) THEN
-			o_vdivi<=to_unsigned(2*o_vsize,13);
-			o_vdivr<=to_unsigned(o_vacc*4096,25);
+			o_vdivi<=to_unsigned(o_vsize,13);
+			o_vdivr<=to_unsigned(o_vacc*2048,25);
 			------------------------------------------------------
 			IF o_divstart='1' THEN
 				o_divcpt<=0;
