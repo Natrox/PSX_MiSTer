@@ -22,6 +22,8 @@ entity joypad is
       joypad3              : in  joypad_t;
       joypad4              : in  joypad_t;
       multitap             : in  std_logic;
+      multitapDigital      : in  std_logic;
+      multitapAnalog       : in  std_logic;
       joypad1_rumble       : out std_logic_vector(15 downto 0) := (others => '0');
       joypad2_rumble       : out std_logic_vector(15 downto 0) := (others => '0');
       joypad3_rumble       : out std_logic_vector(15 downto 0) := (others => '0');
@@ -44,6 +46,7 @@ entity joypad is
       Gun2Y_scanlines      : in  unsigned(8 downto 0);
       Gun1AimOffscreen     : in  std_logic;
       Gun2AimOffscreen     : in  std_logic;
+      JustifierIrqEnable   : out std_logic_vector(1 downto 0);
 
       snacPort1_in         : in  std_logic;
       snacPort2_in         : in  std_logic;		
@@ -157,8 +160,6 @@ architecture arch of joypad is
    signal receiveValidMem1    : std_logic;
    signal receiveValidMem2    : std_logic;
 
-   signal rumble_selected     : std_logic_vector(15 downto 0);
-   signal rumble_previous     : std_logic_vector(15 downto 0);
    signal GunX                : unsigned(7 downto 0);
    signal GunY_scanlines      : unsigned(8 downto 0);
    signal GunAimOffscreen     : std_logic;
@@ -224,11 +225,6 @@ begin
             beginTransfer   <= '0';
             actionNext      <= '0';
             
-            joypad1_rumble  <= (others => '0');
-            joypad2_rumble  <= (others => '0');
-            joypad3_rumble  <= (others => '0');
-            joypad4_rumble  <= (others => '0');
-
          elsif (ce = '1') then
          
             bus_dataRead <= (others => '0');
@@ -370,14 +366,6 @@ begin
             end if;
             JOY_CTRL_13_1 <= JOY_CTRL(13);
             
-            if (receiveValidPad = '1') then
-               if (selectedPort1 = '1') then
-                  joypad1_rumble <= rumble_selected;
-               else
-                  joypad2_rumble <= rumble_selected;
-               end if;
-            end if;
-          
          end if;
       end if;
    end process;
@@ -410,9 +398,14 @@ begin
       joypad2              => joypad2,
       joypad3              => joypad3,
       joypad4              => joypad4,
-      rumble               => rumble_selected,
+      joypad1_rumble       => joypad1_rumble,
+      joypad2_rumble       => joypad2_rumble,
+      joypad3_rumble       => joypad3_rumble,
+      joypad4_rumble       => joypad4_rumble,
       padMode              => padMode,
       isMultitap           => multitap,
+      multitapDigital      => multitapDigital,
+      multitapAnalog       => multitapAnalog,
       portNr               => portNr,
       isPal                => isPal,
 
@@ -437,6 +430,7 @@ begin
       GunX                 => GunX,
       GunY_scanlines       => GunY_scanlines,
       GunAimOffscreen      => GunAimOffscreen,
+      JustifierIrqEnable   => JustifierIrqEnable,
       
       ss_in                => ss_in(7),
       ss_out               => ss_out(7)

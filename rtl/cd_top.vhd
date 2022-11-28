@@ -110,6 +110,7 @@ architecture arch of cd_top is
    signal ackPendingIRQ             : std_logic := '0';
    signal ackPendingSector          : std_logic := '0';
    signal ackRead_valid             : std_logic := '0';
+   signal irqTimeout                : integer range 0 to 10000 := 0;
             
    signal FifoParam_reset           : std_logic := '0';
    signal FifoParam_Din             : std_logic_vector(7 downto 0) := (others => '0');
@@ -378,6 +379,7 @@ architecture arch of cd_top is
    signal XA_reset                  : std_logic := '0';
    signal XA_EOF                    : std_logic := '0';
    signal xa_muted                  : std_logic;
+   signal Xa_playing                : std_logic;
    signal cdaudio_left              : signed(15 downto 0);
    signal cdaudio_right             : signed(15 downto 0);
    
@@ -531,7 +533,9 @@ begin
       
          if (reset = '1') then
             
-            FifoData_reset <= '1';
+            FifoData_reset  <= '1';
+            
+            irqTimeout      <= 0;
             
             CDROM_STATUS    <= ss_in(21)(7 downto 0); -- x"18";
             CDROM_IRQENA    <= ss_in(21)(12 downto 8); -- (others => '0');
@@ -604,10 +608,7 @@ begin
                               CDROM_IRQFLAG <= newFlags;
                               if (newFlags = "00000") then
                                  if (pendingDriveIRQ /= "00000") then
-                                    ackPendingIRQ   <= '1';
-                                    if (pendingDriveIRQ = "00001") then
-                                       ackPendingSector <= '1';
-                                    end if;
+                                    -- handled after waiting time below!
                                  else
                                     if (cmd_delay > 0) then
                                        cmd_unpause <= '1';
@@ -679,6 +680,17 @@ begin
                   
                   when others => null;
                end case;
+            end if;
+            
+            if (CDROM_IRQFLAG /= "00000") then
+               irqTimeout <= 0;
+            elsif (irqTimeout < 10000) then
+               irqTimeout <= irqTimeout + 1;
+            elsif (pendingDriveIRQ /= "00000") then
+               ackPendingIRQ   <= '1';
+               if (pendingDriveIRQ = "00001") then
+                  ackPendingSector <= '1';
+               end if;
             end if;
             
             if (cmdAck = '1' or cmdIRQ = '1') then
@@ -1745,6 +1757,7 @@ begin
             addSeekTime   <= '0';
             
             allow_speedhack <= '0';
+            Xa_playing      <= '0';
             
          elsif (softReset = '1') then
          
@@ -1810,9 +1823,15 @@ begin
                allow_speedhack <= '0';
             end if;
             
+            if (XA_reset = '1') then
+               Xa_playing <= '0';
+            elsif (XA_start = '1') then
+               Xa_playing <= '1';
+            end if;
+            
             sectorBufferFilled <= '0';
             if (driveState = DRIVE_READING and sectorBufferSizes(to_integer((writeSectorPointer + 4))) /= 0) then -- allow up to 4 buffers to be filled
-               sectorBufferFilled <= '1';
+               sectorBufferFilled <= not Xa_playing;
             end if;
          
             if (driveBusy = '1') then
@@ -3030,7 +3049,7 @@ begin
                if (to_integer(unsigned(trackinfo_addr)) = 3) then
                   libcryptKey <= trackinfo_data(15 downto 0);
                   region_out  <= trackinfo_data(17 downto 16);
-                  resetFromCD <= trackinfo_data(18);
+                  resetFromCD <= trackinfo_data(18) and (not LIDopen);
                end if;
             
                -- tracks

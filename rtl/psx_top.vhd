@@ -178,6 +178,8 @@ entity psx_top is
       joypad3               : in  joypad_t;
       joypad4               : in  joypad_t;
       multitap              : in  std_logic;
+      multitapDigital       : in  std_logic;
+      multitapAnalog        : in  std_logic;
       joypad1_rumble        : out std_logic_vector(15 downto 0);
       joypad2_rumble        : out std_logic_vector(15 downto 0);
       joypad3_rumble        : out std_logic_vector(15 downto 0);
@@ -556,9 +558,12 @@ architecture arch of psx_top is
    signal Gun1Y_scanlines        : unsigned(8 downto 0);
    signal Gun2Y_scanlines        : unsigned(8 downto 0);
    signal Gun1AimOffscreen       : std_logic;
-   signal Gun2AimOffscreen       : std_logic;
+   signal Gun2AimOffscreen       : std_logic;   
+   signal Gun1offscreen          : std_logic;
+   signal Gun2offscreen          : std_logic;
    signal Gun1IRQ10              : std_logic;
    signal Gun2IRQ10              : std_logic;
+   signal JustifierIrqEnable     : std_logic_vector(1 downto 0);
 
    -- memcard
    signal memcard1_pause         : std_logic;
@@ -1009,6 +1014,9 @@ begin
    Gun1AimOffscreen <= '1' when Gun1X = x"00" or Gun1X = x"FF" or Gun1Y = x"00" or Gun1Y = x"FF" else '0';
    Gun2AimOffscreen <= '1' when Gun2X = x"00" or Gun2X = x"FF" or Gun2Y = x"00" or Gun2Y = x"FF" else '0';
 
+   Gun1offscreen <= '1' when (Gun1AimOffscreen = '1' or joypad1.KeyTriangle = '1') else '0';
+   Gun2offscreen <= '1' when (Gun2AimOffscreen = '1' or joypad2.KeyTriangle = '1') else '0';
+
    Gun1CrosshairOn <= '1' when
                       showGunCrosshairs = '1' and
                       (joypad1.PadPortGunCon = '1' or joypad1.PadPortJustif = '1') and
@@ -1041,6 +1049,8 @@ begin
       joypad3              => joypad3,
       joypad4              => joypad4,
       multitap             => multitap,
+      multitapDigital      => multitapDigital,
+      multitapAnalog       => multitapAnalog,
       joypad1_rumble       => joypad1_rumble,
       joypad2_rumble       => joypad2_rumble,
       joypad3_rumble       => joypad3_rumble,
@@ -1063,6 +1073,7 @@ begin
       Gun2Y_scanlines      => Gun2Y_scanlines,
       Gun1AimOffscreen     => Gun1AimOffscreen,
       Gun2AimOffscreen     => Gun2AimOffscreen,
+      JustifierIrqEnable   => JustifierIrqEnable,
       
       snacPort1_in         => snacport1,
       snacPort2_in         => snacport2,      
@@ -1166,8 +1177,10 @@ begin
    
    irq_SIO       <= '0'; -- todo
    irq_LIGHTPEN  <= '1' when
-                    (Gun1IRQ10 = '1' and joypad1.PadPortJustif = '1') or
-                    (Gun2IRQ10 = '1' and joypad2.PadPortJustif = '1')
+                    (irq10Snac = '1' and snacport1 = '1') or
+                    (irq10Snac = '1' and snacport2 = '1') or
+                    (Gun1IRQ10 = '1' and joypad1.PadPortJustif = '1' and JustifierIrqEnable(0) = '1') or
+                    (Gun2IRQ10 = '1' and joypad2.PadPortJustif = '1' and JustifierIrqEnable(1) = '1')
                  else '0';
 
    iirq : entity work.irq
@@ -1188,7 +1201,6 @@ begin
       irq_SIO              => irq_SIO,     
       irq_SPU              => irq_SPU,     
       irq_LIGHTPEN         => irq_LIGHTPEN,
-      irq10Snac            => irq10Snac,
       
       bus_addr             => bus_irq_addr,     
       bus_dataWrite        => bus_irq_dataWrite,
@@ -1468,11 +1480,13 @@ begin
       Gun1CrosshairOn      => Gun1CrosshairOn,
       Gun1X                => Gun1X,
       Gun1Y_scanlines      => Gun1Y_scanlines,
+      Gun1offscreen        => Gun1offscreen,
       Gun1IRQ10            => Gun1IRQ10,
 
       Gun2CrosshairOn      => Gun2CrosshairOn,
       Gun2X                => Gun2X,
       Gun2Y_scanlines      => Gun2Y_scanlines,
+      Gun2offscreen        => Gun2offscreen,
       Gun2IRQ10            => Gun2IRQ10,
 
       cdSlow               => cdslowEna,

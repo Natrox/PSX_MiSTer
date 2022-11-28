@@ -339,10 +339,10 @@ wire reset_or = RESET | buttons[1] | status[0] | bios_download | exe_download | 
 ////////////////////////////  HPS I/O  //////////////////////////////////
 
 // Status Bit Map: (0..31 => "O", 32..63 => "o")
-// 0         1         2         3          4         5         6            7         8         9
+// 0         1         2         3          4         5         6          7         8         9
 // 01234567890123456789012345678901 23456789012345678901234567890123 45678901234567890123456789012345
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV 
-//  X XX XXXXXX XXXXXX XXXXX  XX XX XXXXXXXXXXXXXXXXXXXXXXXX  XXX XX XXXXXXXXXXXXXXXXXXXXXXXXXX
+//  X XX XXXXXX XXXXXX XXXXX  XX XX XXXXXXXXXXXXXXXXXXXXXXXXXXXXX XX XX XXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 parameter CONF_STR = {
@@ -375,7 +375,7 @@ parameter CONF_STR = {
 	"D8O[52:49],Pad2,Dualshock,Off,Digital,Analog,GunCon,NeGcon,Wheel-NegCon,Wheel-Analog,Mouse,Justifier,SNAC-port2,Analog Joystick;",
 	"D8h2O[9],Show Crosshair,Off,On;",
 	"D8h4O[31],DS Mode,L3+R3+Up/Dn | Click,L1+L2+R1+R2+Up/Dn;",
-	"O[66],Multitap,Off,Port1: 4 x Digital;",
+	"O[57:56],Multitap,Off,Port1: 4 x Digital,Port1: 4 x Analog;",
 	"-;",
 
 	"P1,Video & Audio;",
@@ -415,7 +415,7 @@ parameter CONF_STR = {
 	"P2O[72],Pause when CD slow,On,Off(U);",
 	"P2O[15],PAL 60Hz Hack,Off,On(U);",
 	"P2O[21],CD Fast Seek,Off,On(U);",
-	"P2O[77:75],CD Speed,Auto,Forced 1X(U),Forced 2X(U),Hack 4X(U),Hack 6X(U),Hack 8X(U);",
+	"P2O[77:75],CD Speed,Original,Forced 1X(U),Forced 2X(U),Hack 4X(U),Hack 6X(U),Hack 8X(U);",
 	"P2O[78],Limit Max CD Speed,Off,On(U);",
 	"P2O[85],RAM(Homebrew),2 MByte,8 MByte(U);",
 	"P2-;",
@@ -439,7 +439,7 @@ parameter CONF_STR = {
 
 	"-   ;",
 	"R0,Reset;",
-	"J1,Triangle,Circle,Cross,Square,Select,Start,L1,R1,L2,R2,L3,R3,Savestates,Fastforward,Pause(Core),Toggle Dualshock;",
+	"J1,Triangle(NeGcon B),O(Gun Fire|NeGcon A),X(Gun B|NeGcon I),[](NeGcon II),Select,Start(Gun A),L1,R1,L2,R2,L3,R3,Savestates,Fastforward,Pause(Core),Toggle Dualshock;",
 	"jn,X,A,B,Y,Select,Start,L,R;",
 	"I,",
 	"Load=DPAD Up|Save=Down|Slot=L+R,",
@@ -464,7 +464,8 @@ parameter CONF_STR = {
 	"Region JP,",
 	"Region US,",
 	"Region EU,",
-	"Saving Memcard;",
+	"Saving Memcard,",
+	"Unsafe option used!;",
 	"V,v",`BUILD_DATE
 };
 
@@ -581,7 +582,11 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1), .VDNUM(4), .BLKSZ(3)) hps_io
    .joystick_l_analog_0(joystick_analog_l0),
    .joystick_r_analog_0(joystick_analog_r0),  
    .joystick_l_analog_1(joystick_analog_l1),
-   .joystick_r_analog_1(joystick_analog_r1),
+   .joystick_r_analog_1(joystick_analog_r1),   
+   .joystick_l_analog_2(joystick_analog_l2),
+   .joystick_r_analog_2(joystick_analog_r2),   
+   .joystick_l_analog_3(joystick_analog_l3),
+   .joystick_r_analog_3(joystick_analog_r3),
    .ps2_mouse(mouse),
    .joystick_0_rumble(paused ? 16'h0000 : joystick1_rumble),
    .joystick_1_rumble(paused ? 16'h0000 : joystick2_rumble),
@@ -857,7 +862,12 @@ wire PadPortJustif2  = (status[52:49] == 4'b1001);
 wire snacPort2       = (status[52:49] == 4'b1010) && ~multitap;
 wire PadPortStick2   = (status[52:49] == 4'b1011);
 
-wire multitap       = status[66];
+// 00 -> multitap off
+// 01 -> port1, 4 x digital
+// 10 -> port1, 4 x analog
+wire multitap        = (status[57:56] != 2'b00);
+wire multitapDigital = (status[57:56] == 2'b01);
+wire multitapAnalog  = (status[57:56] == 2'b10);
 
 wire [1:0] padMode;
 reg  [1:0] padMode_1;
@@ -893,7 +903,11 @@ always @(posedge clk_1x) begin
       if (padMode[1])  psx_info <= 8'd17;
       if (!padMode[1]) psx_info <= 8'd18;
    end else if (cdinfo_download_1 && ~cdinfo_download) begin
-      if (status[40:39] == 2'b00) begin
+      // warning for every unsafe option
+      if (status[89] || status[80:79] > 0 || status[72] || status[15] || status[21] || status[77:75] > 0 || status[78] || status[85]) begin
+         psx_info_req <= 1;
+         psx_info     <= 8'd24;
+      end else if (status[40:39] == 2'b00) begin
          psx_info_req <= 1;
          case(region_out)
             0: begin psx_info <= 8'd19; end   // unknown => default to NTSC          
@@ -1224,6 +1238,8 @@ psx
    .MouseX({mouse[4],mouse[15:8]}),
    .MouseY({mouse[5],mouse[23:16]}),
    .multitap(multitap),
+   .multitapDigital(multitapDigital),
+   .multitapAnalog(multitapAnalog),
    //snac
    .snacPort1(snacPort1),
    .snacPort2(snacPort2),

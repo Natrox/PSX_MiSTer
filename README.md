@@ -78,6 +78,38 @@ Some games are secured with Libcrypt and will not work if it's not circumvented.
 You can provide a .sbi file to do that.
 If there is a .sbi file next to a .cue with the same name, it is loaded automatically when mounting the CD image.
 
+## Unsafe options
+
+The core offers various options to improve gameplay for some games, but those options cannot be considered stable through all games.
+If you use one or more of these options, the core will warn you every time you start a game.
+
+- 480i to 480p hack: 
+Allows to render some games with full 480p resolution, removing interlacing artifacts. Only works for some full 3D 480i titles.
+
+- Turbo: 
+Increases CPU, DMA, Memory and GTE performance by ~10%(Low), ~20%(Medium) or 50%(High). Cheats cannot be used while Turbo is on and are disabled automatically.
+
+- Pause when CD slow: 
+CD data must be returned in a fixed time frame, otherwise the core will pause until the data has arrived. Disabling this will remove these pauses, but also risk that the game hangs up due to CD data being late.
+
+- PAL 60Hz Hack:
+Runs PAL games with 60Hz. PAL Games will often run faster with this hack on. Screen height is limited to 256 lines in this mode, so some games might be cropped.
+
+- CD Fast Seek:
+CD will seek the next sector in the minimal possible time. Decreases loading time of games, but some games depend on the long loading times and will crash.
+
+- CD Speed:
+Allows to run the CD drive with fixed higher speed to decrease loading times, but some games depend on the long loading times and will crash.
+CD will automatically speed down to original speed for FMVs or CD audio playback and back to increased speed in loading areas.
+The higher speed rates are more unstable and require proper storage to be usable with bin/cue files reaching higher performance than chd.
+
+- Limit Max CD Speed:
+Will hold back any new CD data until the game has processed the last data. 
+Mostly useful to prevent CD data overrun when using higher speed modes, leading to overall faster loading times due to less read retries.
+
+- RAM:
+8 Mbyte option from development consoles. Only use for homebrew that requires it, otherwise there is a high chance of crashing games.
+
 ## Error messages
 
 If there is a recognized problem, an overlay is displayed, showing which error has occured.
@@ -129,6 +161,29 @@ The following pad types are emulated by the core and can be independently assign
 SNAC can be selected for each port and will support gamepads and memory cards on the corresponding slot.
 When SNAC is enabled for a slot, the emulated gamepad/memory for this slot is disconnected.
 
+## Controller mapping reference
+NeGcon based controllers
+
+| DualShock (for reference) | NeGcon | Volume | Pachinko |
+|:-------------------------:|:------:|:------:|:--------:|
+| D-PAD                     | D-PAD  |        |          |
+| RX Axis                   | Twist  | Paddle | Handle   |
+| RY Axis                   | I      |        |          |
+| LX Axis                   | L1     |        |          |
+| LY Axis                   | II     |        |          |
+| O                         | A      | B      |          |
+| △                         | B      |        |          |
+| R1                        | R1     |        |          |
+| Start                     | Start  | A      | Button   |
+
+Lightgun
+  
+| DualShock (for reference) |   Guncon  | Justifier |
+|:-------------------------:|:---------:|:---------:|
+| O                         | Trigger   | Trigger   |
+| Start                     | A (Left)  | Start     |
+| X                         | B (Right) | Special   |
+  
 ## Status
 
 Many games working
