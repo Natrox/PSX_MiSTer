@@ -53,6 +53,7 @@ entity joypad is
       actionNextSnac       : in  std_logic;
       receiveValidSnac     : in  std_logic;
       ackSnac              : in  std_logic;
+      snacMC               : in  std_logic;
       receiveBufferSnac    : in  std_logic_vector(7 downto 0);
       transmitValueSnac    : out std_logic_vector(7 downto 0);		
       selectedPort1Snac    : out std_logic;
@@ -119,15 +120,26 @@ architecture arch of joypad is
    signal JOY_CTRL_13_1       : std_logic;
       
    signal beginTransfer       : std_logic := '0';
+   signal beginTransferdelayed: std_logic := '0';	
    signal actionNext          : std_logic := '0';
    signal actionNextPad       : std_logic := '0';
       
    -- snac
    signal snacPort1           : std_logic := '0';
-   signal snacPort2           : std_logic := '0';	
+   signal snacPort2           : std_logic := '0';
+   signal oldselectedPort1Snac: std_logic := '0';
+   signal oldselectedPort2Snac: std_logic := '0';
+   signal SelectedPort1SnacEN : std_logic := '0';
+   signal SelectedPort2SnacEN : std_logic := '0';	
+   signal bitPendingSnac      : std_logic := '0';	
+   signal delayEnableSnac     : std_logic;
+   signal beginTransferdelayedSnac : std_logic := '0';
+   signal initialDelaySnac    : unsigned(7 downto 0) := (others => '0');
+	
    signal baudCntSnac         : unsigned(20 downto 0) := (others => '0');
    signal bitCntSnac          : unsigned(4 downto 0)  := (others => '0');
-   signal actionNextCombine   : std_logic := '0';	
+   signal actionNextCombine   : std_logic := '0';
+   signal snacMCEN            : std_logic := '0';	
       
    -- devices  
    signal isActivePad         : std_logic;
@@ -225,6 +237,7 @@ begin
             bus_dataRead <= (others => '0');
 
             beginTransfer <= '0';
+            beginTransferdelayed <= beginTransfer;--delayed 1 cycle for snac virtual MC R/Ws				
 
             -- bus read
             if (bus_read = '1') then
@@ -322,7 +335,7 @@ begin
                end if;
             end if;
 
-            if (beginTransfer = '1') then
+            if (beginTransferdelayed = '1') then				
                JOY_CTRL(2)    <= '1';
                transmitValue  <= transmitBuffer;
                transmitFilled <= '0';
@@ -368,12 +381,12 @@ begin
    ack                  <= ackPad or ackMem1 or ackMem2 or ackSnac;
    receiveValid         <= receiveValidPad or receiveValidMem1 or receiveValidMem2 or receiveValidSnac;
    actionNextCombine    <= actionNextSnac when (selectedPort1Snac or selectedPort2Snac) else actionNext;
-   
-   selectedPort1 <= '1' when (JOY_CTRL(13) = '0' and JOY_CTRL(1 downto 0) = "11" and snacPort1 = '0') else '0';
-   selectedPort2 <= '1' when (JOY_CTRL(13) = '1' and JOY_CTRL(1 downto 0) = "11" and snacPort2 = '0') else '0';
+
+   selectedPort1 <= '1' when (JOY_CTRL(13) = '0' and JOY_CTRL(1 downto 0) = "11" and selectedPort1Snac = '0') else '0';
+   selectedPort2 <= '1' when (JOY_CTRL(13) = '1' and JOY_CTRL(1 downto 0) = "11" and selectedPort2Snac = '0') else '0';
    selectedPort  <= '0' when (JOY_CTRL(13) /= JOY_CTRL_13_1) else
-                 '1' when (JOY_CTRL(13) = '0' and JOY_CTRL(1 downto 0) = "11" and snacPort1 = '0') else 
-                 '1' when (JOY_CTRL(13) = '1' and JOY_CTRL(1 downto 0) = "11" and snacPort2 = '0') else 
+                 '1' when (JOY_CTRL(13) = '0' and JOY_CTRL(1 downto 0) = "11" and selectedPort1Snac = '0') else 
+                 '1' when (JOY_CTRL(13) = '1' and JOY_CTRL(1 downto 0) = "11" and selectedPort2Snac = '0') else 
                  '0';
 
    GunX            <= Gun2X when selectedPort2 else Gun1X;
@@ -512,11 +525,49 @@ begin
          if (reset = '1') then		  
             baudCntSnac  <= to_unsigned(0, 21);
             bitCntSnac   <= to_unsigned(0, 5);	
-            clk9Snac <= '0';	
+            initialDelaySnac <= to_unsigned(0, 8);
+            delayEnableSnac <= '0';
+            oldselectedPort1Snac <= '0';
+            oldselectedPort2Snac <= '0';
+            beginTransferdelayedSnac <= '0';
+            clk9Snac <= '0';
+            bitPendingSnac <= '0';
+            snacMCEN <= '0';				
 
          elsif (ce = '1') then
+			
+            -- needs to be a delay between select signal and first clk. Memory cards may not work without it, depending on card and software			
+            if (beginTransfer = '1' and delayEnableSnac = '1') then
+              initialDelaySnac <= to_unsigned(255, 8);
+            elsif (beginTransfer = '1' and delayEnableSnac = '0') then
+              initialDelaySnac <= to_unsigned(1, 8);
+            end if;				
 
-            if (SelectedPort1Snac or SelectedPort2Snac) then
+            if (initialDelaySnac > 0) then
+              initialDelaySnac <= initialDelaySnac - 1;
+            end if;
+            if (initialDelaySnac = 1) then
+              beginTransferdelayedSnac <= '1';
+              delayEnableSnac <= '0';
+            else
+              beginTransferdelayedSnac <= '0';
+            end if;
+
+            -- reset things when selected			
+            if ((selectedPort1SnacEN = '1' and oldselectedPort1Snac = '0') or (selectedPort2SnacEN = '1' and oldselectedPort2Snac = '0')) then		
+               baudCntSnac  <= to_unsigned(0, 21);
+               bitCntSnac   <= to_unsigned(0, 5);	
+               delayEnableSnac <= '1'; --a signal to enable the delay. this should happen once when either are selected 
+               snacMCEN <= '1';
+            end if;
+				
+            --check for MC R/W, used to disable snac MC and use virtual card instead
+            if (snacMC = '0' and transmitbuffer = x"81") then
+               snacMCEN <= '0';
+            end if;
+
+            -- clock gen. only do when selected but let the bit finish if interupted
+            if (SelectedPort1Snac or SelectedPort2Snac or bitPendingSnac) then
                if (baudCntSnac > 0) then
                   baudCntSnac <= baudCntSnac - 1;
                else
@@ -525,26 +576,32 @@ begin
                      clk9Snac     <= not clk9Snac;
                      baudCntSnac  <= to_unsigned((to_integer(unsigned(JOY_BAUD)) / 2) - 1, 21);
                   else
-                     clk9Snac <= '1';
+                     clk9Snac     <= '1';
+                     bitPendingSnac   <= '0';							
                   end if;						
                end if;
 				
-               if (beginTransferSnac = '1') then
+               if (beginTransferdelayedSnac = '1') then
                   baudCntSnac    <= to_unsigned((to_integer(unsigned(JOY_BAUD)) / 2) - 1, 21);--should do joy_baud * Baudrate Reload value
                   clk9Snac       <= '0';
+                  bitPendingSnac <= '1';
                   bitCntSnac     <= to_unsigned(17, 5);
                   if (unsigned(JOY_BAUD) = 0) then
                      baudCntSnac  <= to_unsigned(8, 21);			
                   end if;
                end if;	
             end if;	
-
+            oldselectedPort1Snac <= selectedPort1SnacEN;
+            oldselectedPort2Snac <= selectedPort2SnacEN;				
          end if;
       end if;		
    end process;
 	
-   SelectedPort1Snac <= '1' when (JOY_CTRL(13) = '0' and JOY_CTRL(1) = '1' and snacPort1 = '1') else '0';
-   SelectedPort2Snac <= '1' when (JOY_CTRL(13) = '1' and JOY_CTRL(1) = '1' and snacPort2 = '1') else '0';
+   SelectedPort1SnacEN <= '1' when (JOY_CTRL(13) = '0' and JOY_CTRL(1) = '1' and snacPort1 = '1') else '0';
+   SelectedPort2SnacEN <= '1' when (JOY_CTRL(13) = '1' and JOY_CTRL(1) = '1' and snacPort2 = '1') else '0';
+   SelectedPort1Snac <= SelectedPort1SnacEN and snacMCEN;
+   SelectedPort2Snac <= SelectedPort2SnacEN and snacMCEN;	
+ 	
    beginTransferSnac <= begintransfer;
    transmitValueSnac <= transmitValue;
    
@@ -567,7 +624,7 @@ begin
          end if;
          
          SS_idle <= '0';
-         if (transmitting = '0' and waitAck = '0' and beginTransfer = '0' and actionNextCombine = '0' and isActivePad = '0' and beginTransferSnac = '0') then
+         if (transmitting = '0' and waitAck = '0' and beginTransfer = '0' and actionNextCombine = '0' and isActivePad = '0' and beginTransferdelayed = '0' and beginTransferdelayedSnac = '0') then
             SS_idle <= '1';
          end if;
          
